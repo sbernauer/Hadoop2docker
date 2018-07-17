@@ -1,0 +1,13 @@
+echo 'Acquire::http::proxy "http://itproxy-dev.1and1.org:3128";' > /etc/apt/apt.conf
+apt-get update
+apt-get install -y wget nano
+export http_proxy="http://itproxy-dev.1and1.org:3128"
+export https_proxy="http://itproxy-dev.1and1.org:3128"
+wget -O /etc/apt/sources.list.d/ambari.list http://public-repo-1.hortonworks.com/ambari/debian7/2.x/updates/2.5.1.0/ambari.list
+apt-key adv --recv-keys --keyserver keyserver.ubuntu.com B9733A7A07513CAD
+apt-get update
+apt-get install -y ambari-server
+ambari-server setup -s
+# Add -Dhttp.proxyHost=itproxy-dev.1and1.org -Dhttp.proxyPort=3128 to /var/lib/ambari-server/ambari-env.sh
+
+ambari-server start

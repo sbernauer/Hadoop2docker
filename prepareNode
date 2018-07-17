@@ -1,0 +1,64 @@
+# lvresize -r -L128G /dev/vg00/var
+# lvresize -r -L32G /dev/vg00/usr
+# lvresize -r -L60G /dev/vg00/opt
+# lvresize -r -L16G /dev/vg00/tmp
+
+# WARNING !!!
+# Check script before running
+
+lvcreate --name docker-data --size 485G vg00
+mkfs.ext4 /dev/vg00/docker-data
+mkdir /var/docker-data
+mount /dev/vg00/docker-data /var/docker-data #TODO Write in /etc/fstab to make perstistant
+
+apt update
+apt upgrade -y
+apt install -y apt-transport-https ca-certificates curl gnupg2 software-properties-common
+export http_proxy="http://itproxy-dev.1and1.org:3128"
+curl --proxy http://itproxy-dev.1and1.org:3128 -fsSL https://download.docker.com/linux/$(. /etc/os-release; echo "$ID")/gpg | apt-key add -
+add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/$(. /etc/os-release; echo "$ID") $(lsb_release -cs) stable"
+apt update
+apt install -y docker-ce
+
+cat <<EOF > /etc/environment
+http_proxy="http://itproxy-dev.1and1.org:3128"
+https_proxy="http://itproxy-dev.1and1.org:3128"
+no_proxy=".server.lan, .loc.lan, mfdev-docker0101, mfdev-docker0102, mfdev-docker0103, mfdev-docker0104, mfdev-docker0105, mfdev-docker0106, mfdev-docker0107"
+EOF
+
+mkdir -p /etc/systemd/system/docker.service.d
+
+cat <<EOF > /etc/systemd/system/docker.service.d/override.conf
+[Service]
+    Environment="HTTP_PROXY=http://itproxy-dev.1and1.org:3128"
+    Environment="HTTPS_PROXY=http://itproxy-dev.1and1.org:3128"
+    Environment="NO_PROXY=.server.lan, .loc.lan, mfdev-docker0101, mfdev-docker0102, mfdev-docker0103, mfdev-docker0104, mfdev-docker0105, mfdev-docker0106, mfdev-docker0107"
+    ExecStart=
+    ExecStart=/usr/bin/dockerd
+EOF
+
+mkdir -p /etc/docker
+
+cat <<EOF > /etc/docker/daemon.json
+{
+    "insecure-registries": ["mfdev-docker0107:5000", "mfdev-docker0107.server.lan:5000"],
+    "hosts" : [
+        "unix:///var/run/docker.sock",
+        "tcp://0.0.0.0:2375"
+    ],
+    "data-root": "/var/docker-data",
+    "storage-driver": "overlay2",
+    "default-ulimits": {
+        "memlock": {
+            "Name": "memlock",
+            "Hard": -1,
+            "Soft": -1
+        }
+    }
+}
+EOF
+
+systemctl daemon-reload
+systemctl restart docker
+rm -r /var/lib/docker # remove old files
+docker info # check if everything has worked
